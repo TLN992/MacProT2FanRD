@@ -151,8 +151,8 @@ fn start_temp_loop(
     signal_hook::flag::register(SIGINT, cancellation_token.clone()).map_err(Error::Signal)?;
     signal_hook::flag::register(SIGTERM, cancellation_token.clone()).map_err(Error::Signal)?;
 
-    //let mut cpu_last_temp = 0;
-    //let mut gpu_last_temp = 0;
+    let mut cpu_last_temp = 0;
+    let mut gpu_last_temp = 0;
     let mut cpu_temps = ArrayDeque::<u8, 50, arraydeque::Wrapping>::new();
     let mut gpu_temps = ArrayDeque::<u8, 50, arraydeque::Wrapping>::new();
     while !cancellation_token.load(std::sync::atomic::Ordering::Relaxed) {
@@ -188,7 +188,7 @@ fn start_temp_loop(
         let cpu_sum_temp: u16 = cpu_temps.iter().map(|t| *t as u16).sum();
         let cpu_mean_temp = cpu_sum_temp / (cpu_temps.len() as u16);
 
-        if cpu_mean_temp == cpu_sum_temp && gpu_mean_temp == gpu_sum_temp {
+        if cpu_mean_temp == cpu_last_temp && gpu_mean_temp == gpu_last_temp {
             // Avoid messing up the mean due to the longer sleep.
             for _ in 0..9 {
                 cpu_temps.push_back(cpu_temp);
@@ -197,7 +197,8 @@ fn start_temp_loop(
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
 
-        //cpu_last_temp = cpu_mean_temp;
+        cpu_last_temp = cpu_mean_temp;
+        gpu_last_temp = gpu_mean_temp;
 
         for fan in fans {
             fan.set_speed(fan.calc_speed(cpu_mean_temp as u8, gpu_mean_temp as u8))?;
