@@ -107,7 +107,7 @@
               };
             };
 
-            environment.etc."macprot2fans.toml".text = (pkgs.formats.toml { }).generate "macprot2fans.toml" {
+            environment.etc."macprot2fans.toml".source = (pkgs.formats.toml { }).generate "macprot2fans.toml" {
               defaults = cfg.defaults;
               fan = cfg.fans;
               degraded = cfg.degraded;
