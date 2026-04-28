@@ -108,7 +108,7 @@ impl FanController {
         if speed < self.min_speed {
             speed = self.min_speed;
         } else if speed >= self.max_speed {
-            speed = self.max_speed + 150;
+            speed = self.max_speed + 260;
         }
 
         write!(&*file, "{speed}").map_err(Error::FanWrite)

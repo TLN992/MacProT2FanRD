@@ -155,7 +155,7 @@ pub struct DegradedConfig {
 impl Default for DegradedConfig {
     fn default() -> Self {
         Self {
-            expected_drivers: vec!["coretemp".into(), "amdgpu".into()],
+            expected_drivers: vec!["coretemp".into(), "amdgpu".into(), "apple-t2-smc".into()],
             initial_percent: 60,
             escalated_percent: 80,
             escalation_delay: 60,
@@ -351,7 +351,7 @@ pub fn generate_config_toml(sensors: &[HwmonSensor], fan_paths: &[FanPath]) -> S
     }
 
     out.push_str("[degraded]\n");
-    out.push_str("expected_drivers = [\"coretemp\", \"amdgpu\"]\n");
+    out.push_str("expected_drivers = [\"coretemp\", \"amdgpu\", \"apple-t2-smc\"]\n");
     out.push_str("initial_percent = 60\n");
     out.push_str("escalated_percent = 80\n");
     out.push_str("escalation_delay = 60  # seconds before escalation\n");
@@ -367,6 +367,7 @@ pub struct CliArgs {
     pub generate_nix: bool,
     pub list_sensors: bool,
     pub list_fans: bool,
+    pub status: bool,
 }
 
 pub fn parse_cli_args() -> CliArgs {
@@ -377,6 +378,7 @@ pub fn parse_cli_args() -> CliArgs {
         generate_nix: false,
         list_sensors: false,
         list_fans: false,
+        status: false,
     };
 
     let mut i = 1;
@@ -392,6 +394,7 @@ pub fn parse_cli_args() -> CliArgs {
             "--generate-nix" => cli.generate_nix = true,
             "--list-sensors" => cli.list_sensors = true,
             "--list-fans" => cli.list_fans = true,
+            "--status" => cli.status = true,
             _ => {}
         }
         i += 1;

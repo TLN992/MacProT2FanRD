@@ -1,0 +1,60 @@
+# macprot2fans configuration file
+
+[defaults]
+low_temp = 45
+high_temp = 75
+speed_curve = "linear"
+always_full_speed = false
+sensor_aggregation = "max"
+ramp_down_rate = 1
+
+[fan.fan0]
+high_temp = 70
+sensor_aggregation = "average"
+sensors = [
+  "nvme Composite",
+  "smc DIMM VRM [TM0V]",
+  "coretemp Package id 0",
+  "smc MPX Bay 1 GPU Proximity [TS1e]",
+  "smc MPX Bay 2 GPU Proximity [TS2e]",
+]
+
+[fan.fan1]
+low_temp = 55
+high_temp = 89
+speed_curve = "exponential"
+sensors = [
+  "smc MPX Bay 1 GPU Proximity [TS1e]",
+  "smc MPX Bay 2 GPU Proximity [TS2e]",
+  "amdgpu[0] edge",
+  "amdgpu[0] junction",
+  "amdgpu[0] mem",
+  "amdgpu[1] edge",
+  "amdgpu[1] junction",
+  "amdgpu[1] mem",
+]
+
+[fan.fan2]
+low_temp = 55
+high_temp = 89
+speed_curve = "exponential"
+sensors = [
+  "smc MPX Bay 1 GPU Proximity [TS1e]",
+  "smc MPX Bay 2 GPU Proximity [TS2e]",
+  "amdgpu[0] edge",
+  "amdgpu[0] junction",
+  "amdgpu[0] mem",
+  "amdgpu[1] edge",
+  "amdgpu[1] junction",
+  "amdgpu[1] mem",
+]
+
+[fan.fan3]
+speed_curve = "exponential"
+sensors = ["coretemp Package id 0"]
+
+[degraded]
+expected_drivers = ["coretemp", "amdgpu", "apple-t2-smc"]
+initial_percent = 60
+escalated_percent = 80
+escalation_delay = 60

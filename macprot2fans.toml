@@ -1,0 +1,25 @@
+# macprot2fans configuration file
+# See --generate-config for a template with discovered hardware
+
+[defaults]
+low_temp = 55
+high_temp = 75
+speed_curve = "linear"  # "linear", "exponential", or "logarithmic"
+always_full_speed = false
+sensor_aggregation = "max"  # "max", "average", or "min"
+ramp_down_rate = 1.0  # °C/sec gradual fan ramp-down rate
+
+# [fan.fan0]
+# low_temp = 55       # override defaults for this fan
+# high_temp = 75
+# speed_curve = "linear"
+# always_full_speed = false
+# sensor_aggregation = "max"
+# ramp_down_rate = 1.0
+# sensors = []        # list sensor names; omit to use max(all sensors)
+
+[degraded]
+expected_drivers = ["coretemp", "amdgpu"]
+initial_percent = 60
+escalated_percent = 80
+escalation_delay = 60  # seconds before escalation

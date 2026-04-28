@@ -50,8 +50,8 @@ impl HwmonSensor {
 
         self.temp_file.rewind().map_err(Error::TempSeek)?;
 
-        let millidegrees = buf.trim_end().parse::<u32>().map_err(Error::TempParse)?;
+        let millidegrees = buf.trim_end().parse::<i32>().map_err(Error::TempParse)?;
         buf.clear();
-        Ok((millidegrees / 1000) as u8)
+        Ok((millidegrees / 1000).clamp(0, 255) as u8)
     }
 }
