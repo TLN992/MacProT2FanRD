@@ -1,134 +1,62 @@
-#![warn(rust_2018_idioms)]
-#![warn(clippy::pedantic)]
-#![allow(
-    clippy::cast_lossless,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_precision_loss,
-    clippy::similar_names,
-    clippy::module_name_repetitions
-)]
-
-use std::{
-    io::{ErrorKind, Read, Seek},
-    path::PathBuf,
-    process::ExitCode,
-    sync::{atomic::AtomicBool, Arc},
-};
-
-use arraydeque::ArrayDeque;
-use fan_controller::FanController;
-use nonempty::NonEmpty as NonEmptyVec;
-use signal_hook::consts::{SIGINT, SIGTERM};
-
-use config::load_fan_configs;
-use error::{Error, Result};
-
 mod config;
 mod error;
-mod fan_controller;
+mod fan;
+mod sensor;
+mod wizard;
+
+use std::collections::VecDeque;
+use std::io::ErrorKind;
+use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+
+use signal_hook::consts::{SIGINT, SIGTERM};
+
+use config::{
+    DegradedConfig, ResolvedFanConfig, SensorAggregation, config_path, load_config, parse_cli_args,
+    resolve_config,
+};
+use error::{Error, Result};
+use fan::FanController;
+use fan::discovery::find_fan_paths;
+use sensor::SensorStatus;
+use sensor::registry::SensorRegistry;
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("This tool is only developed for Linux systems.");
 
 #[cfg(debug_assertions)]
-const PID_FILE: &str = "t2fand.pid";
+const PID_FILE: &str = "macprot2fans.pid";
 #[cfg(not(debug_assertions))]
-const PID_FILE: &str = "/run/t2fand.pid";
+const PID_FILE: &str = "/run/macprot2fans.pid";
 
-fn get_current_euid() -> libc::uid_t {
-    // SAFETY: FFI call with no preconditions
-    unsafe { libc::geteuid() }
-}
-
-fn find_fan_paths() -> Result<NonEmptyVec<PathBuf>> {
-    // APP0001:00/fan1_label
-    let fan = glob::glob("/sys/devices/pci*/*/*/*/APP0001:00/fan*")?
-        .filter_map(Result::ok)
-        .find(|p| p.exists())
-        .ok_or(Error::NoFan)?;
-
-    // APP0001:00
-    let first_fan_path = fan.parent().ok_or(Error::NoFan)?;
-    // APP0001:00/fan*_input
-    let fan_glob = first_fan_path.display().to_string() + "/fan*_input";
-    // APP0001:00/fan1
-    let fans = glob::glob(&fan_glob)?
-        .filter_map(Result::ok)
-        .filter_map(|mut path| {
-            let file_name = path.file_name()?.to_str()?;
-            let fan_name = file_name.strip_suffix("_input")?;
-            let fan_name_owned = fan_name.to_owned();
-            path.set_file_name(fan_name_owned);
-            Some(path)
-        });
-
-    NonEmptyVec::collect(fans).ok_or(Error::NoFan)
-}
-
-fn check_pid_file() -> Result<()> {
-    match std::fs::read_to_string(PID_FILE) {
-        Ok(pid) => {
-            let mut proc_path = std::path::PathBuf::new();
-            proc_path.push("/proc");
-            proc_path.push(pid);
-
-            if proc_path.exists() {
-                return Err(Error::AlreadyRunning);
-            }
-        }
-        Err(err) if err.kind() == ErrorKind::NotFound => {}
-        Err(err) => return Err(Error::PidRead(err)),
-    };
-
-    let current_pid = std::process::id().to_string();
-    std::fs::write(PID_FILE, current_pid).map_err(Error::PidWrite)
-}
-
-fn read_temp_file(temp_file: &mut std::fs::File, temp_buf: &mut String) -> Result<u8> {
-    temp_file
-        .read_to_string(temp_buf)
-        .map_err(Error::TempRead)?;
-
-    temp_file.rewind().map_err(Error::TempSeek)?;
-
-    let temp = temp_buf.trim_end().parse::<u32>().map_err(Error::TempParse);
-    temp_buf.clear();
-    temp.map(|t| (t / 1000) as u8)
-}
-
-fn find_temp_file(temps: glob::Paths, temp_buf: &mut String) -> Option<std::fs::File> {
-    for temp_path_res in temps {
-        let Ok(temp_path) = temp_path_res else {
-            eprintln!("Unable to read glob path");
-            continue;
-        };
-
-        let Ok(mut temp_file) = std::fs::File::open(temp_path) else {
-            eprintln!("Unable to open temperature sensor");
-            continue;
-        };
-
-        if read_temp_file(&mut temp_file, temp_buf).is_ok() {
-            return Some(temp_file);
-        }
-    }
-
-    None
-}
-
-fn find_cpu_temp_file(temp_buf: &mut String) -> Result<std::fs::File> {
-    let temps = glob::glob("/sys/devices/platform/coretemp.0/hwmon/hwmon*/temp1_input")?;
-    find_temp_file(temps, temp_buf).ok_or(Error::NoCpu)
-}
-
-fn find_gpu_temp_file(temp_buf: &mut String) -> Result<Option<std::fs::File>> {
-    let temps = glob::glob("/sys/class/drm/card0/device/hwmon/hwmon*/temp1_input")?;
-    Ok(find_temp_file(temps, temp_buf))
-}
+const RETRY_INTERVAL: Duration = Duration::from_secs(3);
 
 fn main() -> ExitCode {
-    match real_main() {
+    let cli = parse_cli_args();
+
+    if cli.list_sensors {
+        list_sensors_and_exit();
+        return ExitCode::SUCCESS;
+    }
+
+    if cli.list_fans {
+        list_fans_and_exit();
+        return ExitCode::SUCCESS;
+    }
+
+    if cli.generate_config {
+        run_wizard_and_exit(false);
+        return ExitCode::SUCCESS;
+    }
+
+    if cli.generate_nix {
+        run_wizard_and_exit(true);
+        return ExitCode::SUCCESS;
+    }
+
+    match run_daemon(cli.config_path.as_deref()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("Error: {err}");
@@ -137,87 +65,301 @@ fn main() -> ExitCode {
     }
 }
 
-fn start_temp_loop(
-    mut temp_buffer: String,
-    mut cpu_temp_file: std::fs::File,
-    mut gpu_temp_file: Option<std::fs::File>,
-    fans: &NonEmptyVec<FanController>,
-) -> Result<()> {
-    let cancellation_token = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGINT, cancellation_token.clone()).map_err(Error::Signal)?;
-    signal_hook::flag::register(SIGTERM, cancellation_token.clone()).map_err(Error::Signal)?;
-
-    let mut last_temp = 0;
-    let mut temps = ArrayDeque::<u8, 50, arraydeque::Wrapping>::new();
-    let mut was_long_sleep = false;
-    while !cancellation_token.load(std::sync::atomic::Ordering::Relaxed) {
-        let cpu_temp = read_temp_file(&mut cpu_temp_file, &mut temp_buffer)?;
-        let temp = if let Some(gpu_temp_file) = &mut gpu_temp_file {
-            let gpu_temp = read_temp_file(gpu_temp_file, &mut temp_buffer)?;
-            if gpu_temp > cpu_temp {
-                gpu_temp
-            } else {
-                cpu_temp
-            }
-        } else {
-            cpu_temp
-        };
-
-        temps.push_back(temp);
-        if was_long_sleep {
-            // Avoid messing up the mean due to the longer sleep.
-            for _ in 0..9 {
-                temps.push_back(temp);
-            }
-        }
-
-        let sum_temp: u16 = temps.iter().map(|t| *t as u16).sum();
-        let mean_temp = sum_temp / (temps.len() as u16);
-        if mean_temp == last_temp {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            was_long_sleep = true;
-        } else {
-            last_temp = mean_temp;
-            for fan in fans {
-                fan.set_speed(fan.calc_speed(mean_temp as u8))?;
-            }
-
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            was_long_sleep = false;
-        }
-    }
-
-    Ok(())
+fn get_current_euid() -> u32 {
+    // SAFETY: FFI call with no preconditions
+    unsafe { libc::geteuid() }
 }
 
-fn real_main() -> Result<()> {
+fn check_pid_file() -> Result<()> {
+    match std::fs::read_to_string(PID_FILE) {
+        Ok(pid) => {
+            let proc_path = std::path::PathBuf::from(format!("/proc/{}", pid.trim()));
+            if proc_path.exists() {
+                return Err(Error::AlreadyRunning);
+            }
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => return Err(Error::PidRead(err)),
+    }
+
+    let current_pid = std::process::id().to_string();
+    std::fs::write(PID_FILE, current_pid).map_err(Error::PidWrite)
+}
+
+fn run_daemon(config_override: Option<&str>) -> Result<()> {
     if get_current_euid() != 0 {
         return Err(Error::NotRoot);
     }
 
     check_pid_file()?;
 
-    let mut temp_buffer = String::new();
+    // Load config
+    let path = config_path(config_override);
+    let raw_config = load_config(&path)?;
 
+    // Discover hardware
     let fan_paths = find_fan_paths()?;
-    let fans = load_fan_configs(fan_paths)?;
-    let cpu_temp_file = find_cpu_temp_file(&mut temp_buffer)?;
-    let gpu_temp_file = find_gpu_temp_file(&mut temp_buffer)?;
+    let mut registry = SensorRegistry::new(raw_config.degraded.clone());
 
-    println!();
+    // Resolve per-fan configs
+    let resolved = resolve_config(&raw_config, &fan_paths, registry.sensors());
+
+    let mut fans: Vec<FanController> = fan_paths
+        .into_iter()
+        .zip(resolved)
+        .map(|(fp, cfg)| FanController::new(fp, cfg))
+        .collect::<Result<_>>()?;
+
+    for fan in &mut fans {
+        fan.open_control_files()?;
+    }
+
     for fan in &fans {
         fan.set_manual(true)?;
     }
 
-    let res = start_temp_loop(temp_buffer, cpu_temp_file, gpu_temp_file, &fans);
-    println!("T2 Fan Daemon is shutting down...");
-    for fan in fans {
-        fan.set_manual(false)?;
+    let res = run_temp_loop(&mut fans, &mut registry);
+
+    eprintln!("Fan daemon is shutting down...");
+    for fan in &fans {
+        let _ = fan.set_manual(false);
     }
 
     let pid_res = std::fs::remove_file(PID_FILE).map_err(Error::PidDelete);
+
     match (res, pid_res) {
         (Err(err), _) | (_, Err(err)) => Err(err),
         (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
+fn aggregate_temps(temps: &[u8], method: SensorAggregation) -> Option<u8> {
+    if temps.is_empty() {
+        return None;
+    }
+    match method {
+        SensorAggregation::Max => temps.iter().copied().max(),
+        SensorAggregation::Average => {
+            let sum: u32 = temps.iter().map(|&t| u32::from(t)).sum();
+            Some((sum / temps.len() as u32) as u8)
+        }
+    }
+}
+
+#[derive(Clone)]
+struct TempBuffer(VecDeque<f32>);
+
+impl TempBuffer {
+    pub fn new() -> Self {
+        TempBuffer(VecDeque::with_capacity(16))
+    }
+
+    pub fn push(&mut self, value: f32) {
+        self.0.push_back(value);
+        while self.0.len() > 16 {
+            self.0.pop_front();
+        }
+    }
+
+    pub fn temp(&self) -> f32 {
+        self.0.iter().sum::<f32>() / self.0.len() as f32
+    }
+}
+
+fn run_temp_loop(fans: &mut [FanController], registry: &mut SensorRegistry) -> Result<()> {
+    let cancellation_token = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGINT, cancellation_token.clone()).map_err(Error::Signal)?;
+    signal_hook::flag::register(SIGTERM, cancellation_token.clone()).map_err(Error::Signal)?;
+
+    let fan_count = fans.len();
+    let mut effective_temps: Vec<TempBuffer> = vec![TempBuffer::new(); fan_count];
+    let mut per_fan_last_speed: Vec<u32> = vec![0; fan_count];
+    let mut last_cycle = Instant::now();
+    let mut last_retry = Instant::now();
+    let mut last_status = Instant::now();
+    const STATUS_INTERVAL: Duration = Duration::from_secs(10);
+
+    while !cancellation_token.load(Ordering::Relaxed) {
+        if registry.is_degraded() {
+            let percent = registry.degraded_fan_percent();
+            for fan in fans.iter() {
+                fan.set_speed_percent(percent)?;
+            }
+
+            if last_retry.elapsed() >= RETRY_INTERVAL {
+                registry.retry_discovery();
+                last_retry = Instant::now();
+            }
+
+            std::thread::sleep(RETRY_INTERVAL);
+            last_cycle = Instant::now();
+            continue;
+        }
+
+        let elapsed_secs = last_cycle.elapsed().as_secs_f32();
+        last_cycle = Instant::now();
+
+        let readings = registry.poll_all();
+
+        // Collect all active temps for global fallback
+        let all_active: Vec<u8> = readings
+            .iter()
+            .filter_map(|(_, status)| match status {
+                SensorStatus::Active(t) => Some(*t),
+                _ => None,
+            })
+            .collect();
+
+        let mut any_changed = false;
+        for (i, fan) in fans.iter().enumerate() {
+            // Gather active temps for this fan's sensors
+            let fan_temps: Vec<u8> = match fan.sensor_indices() {
+                Some(indices) if !indices.is_empty() => indices
+                    .iter()
+                    .filter_map(|&idx| {
+                        readings.get(idx).and_then(|(_, status)| match status {
+                            SensorStatus::Active(t) => Some(*t),
+                            _ => None,
+                        })
+                    })
+                    .collect(),
+                _ => all_active.clone(),
+            };
+
+            let raw_temp =
+                aggregate_temps(&fan_temps, fan.sensor_aggregation()).unwrap_or(0) as f32;
+
+            // Asymmetric ramp: instant up, gradual down
+            if raw_temp >= effective_temps[i].temp() {
+                effective_temps[i].push(raw_temp);
+            } else {
+                let decay = fan.ramp_down_rate() * elapsed_secs;
+                let temp = effective_temps[i].temp();
+                effective_temps[i].push((temp - decay).max(raw_temp));
+            }
+
+            let speed = fan.calc_speed(effective_temps[i].temp() as u8);
+            if speed != per_fan_last_speed[i] {
+                per_fan_last_speed[i] = speed;
+                fan.set_speed(speed)?;
+                any_changed = true;
+            }
+        }
+
+        // Periodic status output
+        if last_status.elapsed() >= STATUS_INTERVAL {
+            last_status = Instant::now();
+            eprintln!("\n");
+            for (i, fan) in fans.iter_mut().enumerate() {
+                let rpm = fan.read_rpm().map_or("ERR".into(), |r| format!("{r}"));
+                eprintln!(
+                    "  {} | temp={:.0}°C | RPM={}",
+                    fan.name(),
+                    effective_temps[i].temp(),
+                    rpm,
+                );
+            }
+        }
+
+        if any_changed {
+            std::thread::sleep(Duration::from_millis(100));
+        } else {
+            std::thread::sleep(Duration::from_millis(500));
+        }
+    }
+
+    Ok(())
+}
+
+fn list_sensors_and_exit() {
+    let mut registry = SensorRegistry::new(DegradedConfig::default());
+    let readings = registry.poll_all();
+
+    if readings.is_empty() {
+        println!("No sensors found.");
+        return;
+    }
+
+    println!("{:<30} {:>8}", "SENSOR", "TEMP");
+    println!("{:-<30} {:->8}", "", "");
+
+    for (name, status) in readings {
+        let temp_str = match status {
+            SensorStatus::Active(t) => format!("{t}°C"),
+            SensorStatus::Unavailable => "N/A".into(),
+            SensorStatus::Error(e) => format!("ERR: {e}"),
+        };
+        println!("{:<30} {:>8}", name, temp_str);
+    }
+}
+
+fn list_fans_and_exit() {
+    let fan_paths = match find_fan_paths() {
+        Ok(paths) => paths,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let default_config = ResolvedFanConfig {
+        low_temp: 55,
+        high_temp: 75,
+        speed_curve: config::SpeedCurve::Linear,
+        sensor_aggregation: config::SensorAggregation::Max,
+        ramp_down_rate: 1.0,
+        sensor_indices: None,
+    };
+
+    let mut fans: Vec<FanController> = fan_paths
+        .into_iter()
+        .filter_map(|fp| match FanController::new(fp, default_config.clone()) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("Warning: {e}");
+                None
+            }
+        })
+        .collect();
+
+    if fans.is_empty() {
+        eprintln!("No fans found.");
+        std::process::exit(1);
+    }
+
+    println!(
+        "{:<10} {:>10} {:>10} {:>12}",
+        "FAN", "MIN RPM", "MAX RPM", "CURRENT RPM"
+    );
+    println!("{:-<10} {:->10} {:->10} {:->12}", "", "", "", "");
+
+    for fan in &mut fans {
+        let current = fan.read_rpm().map_or("ERR".into(), |r| format!("{r}"));
+        println!(
+            "{:<10} {:>10} {:>10} {:>12}",
+            fan.name(),
+            fan.min_speed(),
+            fan.max_speed(),
+            current
+        );
+    }
+}
+
+fn run_wizard_and_exit(nix_format: bool) {
+    let registry = SensorRegistry::new(DegradedConfig::default());
+    let fan_paths = match find_fan_paths() {
+        Ok(paths) => paths,
+        Err(e) => {
+            eprintln!("Warning: could not discover fans: {e}");
+            Vec::new()
+        }
+    };
+
+    let config = wizard::run_wizard(registry.sensors(), &fan_paths);
+
+    if nix_format {
+        print!("{}", wizard::format_nix(&config));
+    } else {
+        print!("{}", wizard::format_toml(&config));
     }
 }

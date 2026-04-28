@@ -1,68 +1,68 @@
-#[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("T2 Fan Daemon must be run as root")]
     NotRoot,
-    #[error("Fan not found")]
     NoFan,
-    #[error("CPU temperature sensor not found")]
-    NoCpu,
 
-    #[error("Temperature sensor cannot be read")]
-    TempRead(#[source] std::io::Error),
-    #[error("Temperature sensor cannot be seeked")]
-    TempSeek(#[source] std::io::Error),
-    #[error("Temporature sensor cannot be parsed")]
-    TempParse(#[source] std::num::ParseIntError),
+    TempRead(std::io::Error),
+    TempSeek(std::io::Error),
+    TempParse(std::num::ParseIntError),
 
-    #[error("Cannot read minimum fan speed")]
-    MinSpeedRead(#[source] std::io::Error),
-    #[error("Cannot parse minimum fan speed")]
-    MinSpeedParse(#[source] std::num::ParseIntError),
-    #[error("Cannot read maximum fan speed")]
-    MaxSpeedRead(#[source] std::io::Error),
-    #[error("Cannot parse maximum fan speed")]
-    MaxSpeedParse(#[source] std::num::ParseIntError),
+    MinSpeedRead(std::io::Error),
+    MinSpeedParse(std::num::ParseIntError),
+    MaxSpeedRead(std::io::Error),
+    MaxSpeedParse(std::num::ParseIntError),
 
-    #[error("Cannot read pid file")]
-    PidRead(#[source] std::io::Error),
-    #[error("Cannot write pid file")]
-    PidWrite(#[source] std::io::Error),
-    #[error("Cannot delete pid file")]
-    PidDelete(#[source] std::io::Error),
-    #[error("T2 Fan Daemon is already running")]
+    FanOpen(std::io::Error),
+    FanWrite(std::io::Error),
+
+    PidRead(std::io::Error),
+    PidWrite(std::io::Error),
+    PidDelete(std::io::Error),
     AlreadyRunning,
 
-    #[error("Cannot create default config file")]
-    ConfigCreate(#[source] std::io::Error),
-    #[error("Cannot read config file")]
-    ConfigRead(#[source] std::io::Error),
-    #[error("Cannot parse config file")]
-    ConfigParse(
-        #[from]
-        #[source]
-        ini::ParseError,
-    ),
-    #[error("Missing Fan{0} in config file")]
-    MissingFanConfig(usize),
-    #[error("Missing {0} in config file")]
-    MissingConfigValue(&'static str),
-    #[error("Invalid {0} in config file")]
-    InvalidConfigValue(&'static str),
+    Signal(std::io::Error),
 
-    #[error("Cannot open fan controller handle")]
-    FanOpen(#[source] std::io::Error),
-    #[error("Cannot write to fan controller")]
-    FanWrite(#[source] std::io::Error),
+    Glob(glob::PatternError),
 
-    #[error("Cannot setup shutdown signals")]
-    Signal(#[source] std::io::Error),
+    ConfigRead(std::io::Error),
+    ConfigCreate(std::io::Error),
+    ConfigParse(String),
+}
 
-    #[error("Programmer Error: Invalid glob pattern")]
-    Glob(
-        #[from]
-        #[source]
-        glob::PatternError,
-    ),
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotRoot => write!(f, "Fan daemon must be run as root"),
+            Self::NoFan => write!(f, "No fans found"),
+            Self::TempRead(e) => write!(f, "Temperature sensor cannot be read: {e}"),
+            Self::TempSeek(e) => write!(f, "Temperature sensor cannot be seeked: {e}"),
+            Self::TempParse(e) => write!(f, "Temperature sensor cannot be parsed: {e}"),
+            Self::MinSpeedRead(e) => write!(f, "Cannot read minimum fan speed: {e}"),
+            Self::MinSpeedParse(e) => write!(f, "Cannot parse minimum fan speed: {e}"),
+            Self::MaxSpeedRead(e) => write!(f, "Cannot read maximum fan speed: {e}"),
+            Self::MaxSpeedParse(e) => write!(f, "Cannot parse maximum fan speed: {e}"),
+            Self::FanOpen(e) => write!(f, "Cannot open fan controller handle: {e}"),
+            Self::FanWrite(e) => write!(f, "Cannot write to fan controller: {e}"),
+            Self::PidRead(e) => write!(f, "Cannot read pid file: {e}"),
+            Self::PidWrite(e) => write!(f, "Cannot write pid file: {e}"),
+            Self::PidDelete(e) => write!(f, "Cannot delete pid file: {e}"),
+            Self::AlreadyRunning => write!(f, "Fan daemon is already running"),
+            Self::Signal(e) => write!(f, "Cannot setup shutdown signals: {e}"),
+            Self::Glob(e) => write!(f, "Invalid glob pattern: {e}"),
+            Self::ConfigRead(e) => write!(f, "Cannot read config file: {e}"),
+            Self::ConfigCreate(e) => write!(f, "Cannot create config file: {e}"),
+            Self::ConfigParse(e) => write!(f, "Cannot parse config file: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<glob::PatternError> for Error {
+    fn from(e: glob::PatternError) -> Self {
+        Self::Glob(e)
+    }
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
