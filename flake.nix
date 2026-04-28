@@ -107,11 +107,15 @@
               };
             };
 
-            environment.etc."macprot2fans.toml".source = (pkgs.formats.toml { }).generate "macprot2fans.toml" {
-              defaults = cfg.defaults;
-              fan = cfg.fans;
-              degraded = cfg.degraded;
-            };
+            environment.etc."macprot2fans.toml".source =
+              let
+                filterNulls = lib.filterAttrs (_: v: v != null);
+                cleanFans = lib.mapAttrs (_: filterNulls) cfg.fans;
+              in (pkgs.formats.toml { }).generate "macprot2fans.toml" {
+                defaults = cfg.defaults;
+                fan = cleanFans;
+                degraded = cfg.degraded;
+              };
           };
         };
     };
