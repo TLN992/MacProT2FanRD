@@ -7,21 +7,21 @@ mod wizard;
 use std::collections::VecDeque;
 use std::io::ErrorKind;
 use std::process::ExitCode;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use signal_hook::consts::{SIGINT, SIGTERM};
 
 use config::{
-    DegradedConfig, ResolvedFanConfig, SensorAggregation, config_path, load_config, parse_cli_args,
-    resolve_config,
+    config_path, load_config, parse_cli_args, resolve_config, DegradedConfig, ResolvedFanConfig,
+    SensorAggregation,
 };
 use error::{Error, Result};
-use fan::FanController;
 use fan::discovery::find_fan_paths;
-use sensor::SensorStatus;
+use fan::FanController;
 use sensor::registry::SensorRegistry;
+use sensor::SensorStatus;
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("This tool is only developed for Linux systems.");
@@ -266,11 +266,7 @@ fn run_temp_loop(fans: &mut [FanController], registry: &mut SensorRegistry) -> R
             }
         }
 
-        if any_changed {
-            std::thread::sleep(Duration::from_millis(100));
-        } else {
-            std::thread::sleep(Duration::from_millis(500));
-        }
+        std::thread::sleep(Duration::from_millis(860));
     }
 
     Ok(())
@@ -305,126 +301,126 @@ fn print_status() {
         Group {
             title: "CPU (Xeon W)",
             sensors: &[
-                ("PECI",            "smc CPU PECI [TCXc]"),
-                ("Cluster 0",       "smc CPU Cluster 0 [TCS0]"),
-                ("Cluster 1",       "smc CPU Cluster 1 [TCS1]"),
-                ("Cluster 2",       "smc CPU Cluster 2 [TCS2]"),
-                ("Cluster 3",       "smc CPU Cluster 3 [TCS3]"),
-                ("Proximity 1",     "smc CPU Proximity 1 [TC0P]"),
-                ("Proximity 2",     "smc CPU Proximity 2 [TC1P]"),
-                ("Proximity 3",     "smc CPU Proximity 3 [TC2P]"),
-                ("Proximity 4",     "smc CPU Proximity 4 [TC3P]"),
-                ("Package",         "coretemp Package id 0"),
-                ("Xeon Max",        "smc Xeon Max [TJtd]"),
-                ("Xeon Peak",       "smc Xeon Peak [TJxd]"),
+                ("PECI", "smc CPU PECI [TCXc]"),
+                ("Cluster 0", "smc CPU Cluster 0 [TCS0]"),
+                ("Cluster 1", "smc CPU Cluster 1 [TCS1]"),
+                ("Cluster 2", "smc CPU Cluster 2 [TCS2]"),
+                ("Cluster 3", "smc CPU Cluster 3 [TCS3]"),
+                ("Proximity 1", "smc CPU Proximity 1 [TC0P]"),
+                ("Proximity 2", "smc CPU Proximity 2 [TC1P]"),
+                ("Proximity 3", "smc CPU Proximity 3 [TC2P]"),
+                ("Proximity 4", "smc CPU Proximity 4 [TC3P]"),
+                ("Package", "coretemp Package id 0"),
+                ("Xeon Max", "smc Xeon Max [TJtd]"),
+                ("Xeon Peak", "smc Xeon Peak [TJxd]"),
             ],
         },
         Group {
             title: "GPU 1 (MPX Bay 1)",
             sensors: &[
-                ("Die",             "smc GPU 1 Die [TG0D]"),
-                ("Diode",           "smc GPU 1 Diode [TG0d]"),
-                ("Proximity",       "smc GPU 1 Proximity [TG0P]"),
-                ("Slot Proximity",  "smc MPX Bay 1 GPU Proximity [TS1e]"),
-                ("Slot Hotspot",    "smc MPX Bay 1 Hotspot [TS1h]"),
-                ("Slot VRM",        "smc MPX Bay 1 VRM [TS1V]"),
-                ("Slot Inlet",      "smc MPX Bay 1 Inlet [TS1i]"),
-                ("amdgpu edge",     "amdgpu[0] edge"),
+                ("Die", "smc GPU 1 Die [TG0D]"),
+                ("Diode", "smc GPU 1 Diode [TG0d]"),
+                ("Proximity", "smc GPU 1 Proximity [TG0P]"),
+                ("Slot Proximity", "smc MPX Bay 1 GPU Proximity [TS1e]"),
+                ("Slot Hotspot", "smc MPX Bay 1 Hotspot [TS1h]"),
+                ("Slot VRM", "smc MPX Bay 1 VRM [TS1V]"),
+                ("Slot Inlet", "smc MPX Bay 1 Inlet [TS1i]"),
+                ("amdgpu edge", "amdgpu[0] edge"),
                 ("amdgpu junction", "amdgpu[0] junction"),
-                ("amdgpu mem",      "amdgpu[0] mem"),
+                ("amdgpu mem", "amdgpu[0] mem"),
             ],
         },
         Group {
             title: "GPU 2 (MPX Bay 2)",
             sensors: &[
-                ("Die",             "smc GPU 2 Die [TG1D]"),
-                ("Diode",           "smc GPU 2 Diode [TG1d]"),
-                ("Proximity",       "smc GPU 2 Proximity [TG1P]"),
-                ("Slot Proximity",  "smc MPX Bay 2 GPU Proximity [TS2e]"),
-                ("Slot Hotspot",    "smc MPX Bay 2 Hotspot [TS2h]"),
-                ("Slot VRM",        "smc MPX Bay 2 VRM [TS2V]"),
-                ("Slot Inlet",      "smc MPX Bay 2 Inlet [TS2i]"),
-                ("amdgpu edge",     "amdgpu[1] edge"),
+                ("Die", "smc GPU 2 Die [TG1D]"),
+                ("Diode", "smc GPU 2 Diode [TG1d]"),
+                ("Proximity", "smc GPU 2 Proximity [TG1P]"),
+                ("Slot Proximity", "smc MPX Bay 2 GPU Proximity [TS2e]"),
+                ("Slot Hotspot", "smc MPX Bay 2 Hotspot [TS2h]"),
+                ("Slot VRM", "smc MPX Bay 2 VRM [TS2V]"),
+                ("Slot Inlet", "smc MPX Bay 2 Inlet [TS2i]"),
+                ("amdgpu edge", "amdgpu[1] edge"),
                 ("amdgpu junction", "amdgpu[1] junction"),
-                ("amdgpu mem",      "amdgpu[1] mem"),
+                ("amdgpu mem", "amdgpu[1] mem"),
             ],
         },
         Group {
             title: "GPU Aggregate",
             sensors: &[
-                ("Max",             "smc GPU Max [TGtd]"),
-                ("Peak",            "smc GPU Peak [TGxd]"),
+                ("Max", "smc GPU Max [TGtd]"),
+                ("Peak", "smc GPU Peak [TGxd]"),
             ],
         },
         Group {
             title: "Memory (6/12 DIMMs, 4 Channels)",
             sensors: &[
-                ("Controller",      "smc Memory Controller [TMCa]"),
-                ("VRM",             "smc DIMM VRM [TM0V]"),
-                ("Channel A",       "smc DIMM Group W [TMWP]"),
-                ("Channel B",       "smc DIMM Group X [TMXP]"),
-                ("Channel C",       "smc DIMM Group Y [TMYP]"),
-                ("Channel D",       "smc DIMM Group Z [TMZP]"),
-                ("Zone 1",          "smc DIMM Proximity 1 [TM0P]"),
-                ("Zone 2",          "smc DIMM Proximity 2 [TM1P]"),
-                ("Zone 3",          "smc DIMM Proximity 3 [TM2P]"),
-                ("Zone 4",          "smc DIMM Proximity 4 [TM3P]"),
-                ("Zone 5",          "smc DIMM Proximity 5 [TM4P]"),
-                ("Zone 6",          "smc DIMM Proximity 6 [TM5P]"),
-                ("Zone 7",          "smc DIMM Proximity 7 [TM6P]"),
-                ("Zone 8",          "smc DIMM Proximity 8 [TM7P]"),
-                ("Zone 9",          "smc DIMM Proximity 9 [TM8P]"),
+                ("Controller", "smc Memory Controller [TMCa]"),
+                ("VRM", "smc DIMM VRM [TM0V]"),
+                ("Channel A", "smc DIMM Group W [TMWP]"),
+                ("Channel B", "smc DIMM Group X [TMXP]"),
+                ("Channel C", "smc DIMM Group Y [TMYP]"),
+                ("Channel D", "smc DIMM Group Z [TMZP]"),
+                ("Zone 1", "smc DIMM Proximity 1 [TM0P]"),
+                ("Zone 2", "smc DIMM Proximity 2 [TM1P]"),
+                ("Zone 3", "smc DIMM Proximity 3 [TM2P]"),
+                ("Zone 4", "smc DIMM Proximity 4 [TM3P]"),
+                ("Zone 5", "smc DIMM Proximity 5 [TM4P]"),
+                ("Zone 6", "smc DIMM Proximity 6 [TM5P]"),
+                ("Zone 7", "smc DIMM Proximity 7 [TM6P]"),
+                ("Zone 8", "smc DIMM Proximity 8 [TM7P]"),
+                ("Zone 9", "smc DIMM Proximity 9 [TM8P]"),
             ],
         },
         Group {
             title: "PCIe Slots",
             sensors: &[
-                ("Slot 1",          "smc PCIe Slot 1 Diode [Te0d]"),
-                ("Slot 2",          "smc PCIe Slot 2 Diode [Te1d]"),
-                ("Slot 3",          "smc PCIe Slot 3 Diode [Te2d]"),
-                ("Slot 4",          "smc PCIe Slot 4 Diode [Te3d]"),
-                ("Slot 5",          "smc PCIe Slot 5 Diode [Te4d]"),
-                ("Slot 6",          "smc PCIe Slot 6 Diode [Te5d]"),
-                ("Max",             "smc PCIe Max [TexD]"),
-                ("Peak",            "smc PCIe Peak [Texd]"),
+                ("Slot 1", "smc PCIe Slot 1 Diode [Te0d]"),
+                ("Slot 2", "smc PCIe Slot 2 Diode [Te1d]"),
+                ("Slot 3", "smc PCIe Slot 3 Diode [Te2d]"),
+                ("Slot 4", "smc PCIe Slot 4 Diode [Te3d]"),
+                ("Slot 5", "smc PCIe Slot 5 Diode [Te4d]"),
+                ("Slot 6", "smc PCIe Slot 6 Diode [Te5d]"),
+                ("Max", "smc PCIe Max [TexD]"),
+                ("Peak", "smc PCIe Peak [Texd]"),
             ],
         },
         Group {
             title: "Storage",
             sensors: &[
-                ("NVMe (hwmon)",    "nvme Composite"),
-                ("NVMe A",          "smc NVMe A [TH0a]"),
-                ("NVMe B",          "smc NVMe B [TH0b]"),
-                ("NVMe C",          "smc NVMe C [TH0c]"),
-                ("NVMe D",          "smc NVMe D [TH0d]"),
-                ("Drive Bay",       "smc Drive Bay Proximity [TH0P]"),
+                ("NVMe (hwmon)", "nvme Composite"),
+                ("NVMe A", "smc NVMe A [TH0a]"),
+                ("NVMe B", "smc NVMe B [TH0b]"),
+                ("NVMe C", "smc NVMe C [TH0c]"),
+                ("NVMe D", "smc NVMe D [TH0d]"),
+                ("Drive Bay", "smc Drive Bay Proximity [TH0P]"),
             ],
         },
         Group {
             title: "Power Supply",
             sensors: &[
-                ("PSU 1",           "smc PSU 1 Proximity [Tp0P]"),
-                ("PSU 2",           "smc PSU 2 Proximity [Tp1P]"),
-                ("PSU 3",           "smc PSU 3 Proximity [Tp2P]"),
+                ("PSU 1", "smc PSU 1 Proximity [Tp0P]"),
+                ("PSU 2", "smc PSU 2 Proximity [Tp1P]"),
+                ("PSU 3", "smc PSU 3 Proximity [Tp2P]"),
             ],
         },
         Group {
             title: "Board / Ambient",
             sensors: &[
-                ("Ambient Inlet",   "smc Ambient Inlet [TA0P]"),
-                ("Ambient Air",     "smc Ambient Air [TA0V]"),
-                ("Board 1",         "smc Board Proximity 1 [TB0p]"),
-                ("Board 2",         "smc Board Proximity 2 [TB1p]"),
-                ("Board Max",       "smc Board Max [TBtd]"),
-                ("PCH Die",         "smc PCH Die [TPCD]"),
-                ("Fan Zone",        "smc Fan Zone Proximity [TF0p]"),
+                ("Ambient Inlet", "smc Ambient Inlet [TA0P]"),
+                ("Ambient Air", "smc Ambient Air [TA0V]"),
+                ("Board 1", "smc Board Proximity 1 [TB0p]"),
+                ("Board 2", "smc Board Proximity 2 [TB1p]"),
+                ("Board Max", "smc Board Max [TBtd]"),
+                ("PCH Die", "smc PCH Die [TPCD]"),
+                ("Fan Zone", "smc Fan Zone Proximity [TF0p]"),
             ],
         },
         Group {
             title: "I/O (top panel USB-C / TB3)",
             sensors: &[
-                ("Thunderbolt 1",   "smc Thunderbolt 1 Diode [TI0d]"),
-                ("Thunderbolt 2",   "smc Thunderbolt 2 Diode [TI1d]"),
+                ("Thunderbolt 1", "smc Thunderbolt 1 Diode [TI0d]"),
+                ("Thunderbolt 2", "smc Thunderbolt 2 Diode [TI1d]"),
             ],
         },
     ];
@@ -466,12 +462,19 @@ fn print_status() {
         for fp in fps {
             if let Ok(mut fan) = FanController::new(fp, default_cfg.clone()) {
                 let rpm = fan.read_rpm().map_or("ERR".into(), |r| format!("{r}"));
-                let pct = fan.max_speed().checked_sub(fan.min_speed())
-                    .and_then(|range| if range > 0 {
-                        fan.read_rpm().ok().map(|r| {
-                            ((r.saturating_sub(fan.min_speed())) as f32 / range as f32 * 100.0) as u8
-                        })
-                    } else { None });
+                let pct = fan
+                    .max_speed()
+                    .checked_sub(fan.min_speed())
+                    .and_then(|range| {
+                        if range > 0 {
+                            fan.read_rpm().ok().map(|r| {
+                                ((r.saturating_sub(fan.min_speed())) as f32 / range as f32 * 100.0)
+                                    as u8
+                            })
+                        } else {
+                            None
+                        }
+                    });
                 let pct_str = pct.map_or(String::new(), |p| format!(" ({p}%)"));
                 println!("  {:<20} {:>5} RPM{}", fan.name(), rpm, pct_str);
             }
@@ -482,13 +485,25 @@ fn print_status() {
 
 fn temp_bar(temp: u8, width: usize) -> String {
     let (color, fill) = if temp >= 80 {
-        ("\x1b[1;31m", width.min(((temp as usize).saturating_sub(20)) * width / 80))
+        (
+            "\x1b[1;31m",
+            width.min(((temp as usize).saturating_sub(20)) * width / 80),
+        )
     } else if temp >= 60 {
-        ("\x1b[1;33m", width.min(((temp as usize).saturating_sub(20)) * width / 80))
+        (
+            "\x1b[1;33m",
+            width.min(((temp as usize).saturating_sub(20)) * width / 80),
+        )
     } else if temp >= 40 {
-        ("\x1b[0;32m", width.min(((temp as usize).saturating_sub(20)) * width / 80))
+        (
+            "\x1b[0;32m",
+            width.min(((temp as usize).saturating_sub(20)) * width / 80),
+        )
     } else {
-        ("\x1b[0;34m", width.min(((temp as usize).saturating_sub(20)) * width / 80))
+        (
+            "\x1b[0;34m",
+            width.min(((temp as usize).saturating_sub(20)) * width / 80),
+        )
     };
     let empty = width.saturating_sub(fill);
     format!("{color}{}{}▏\x1b[0m", "█".repeat(fill), "░".repeat(empty))
